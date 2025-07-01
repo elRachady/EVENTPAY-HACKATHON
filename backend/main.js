@@ -39,7 +39,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Servir les fichiers statiques
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Route pour la page d'accueil
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/home.html'));
+});
 
 // Routes API
 app.use('/api/lightning', lightningRouter);
