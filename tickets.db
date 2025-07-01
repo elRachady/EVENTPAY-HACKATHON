@@ -1,0 +1,16 @@
+CREATE TABLE tickets (
+  id TEXT PRIMARY KEY,
+  public_key TEXT,
+  montant_total INTEGER,
+  montant_acquitte INTEGER,
+  date_limite TEXT,
+  statut TEXT,
+  code_ticket_final TEXT
+);
+
+CREATE TABLE paiements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id TEXT,
+  montant INTEGER,
+  date_paiement TEXT
+);
