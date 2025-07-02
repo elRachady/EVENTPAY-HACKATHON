@@ -9,12 +9,21 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const app = express();
 const PORT = process.env.PORT || 3005;
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  res.removeHeader("Content-Security-Policy");
+  next();
+});
+
 // Import des routes
 const lightningRouter = require('./routes/lightning.route');
+app.use('/api/lightning', lightningRouter);
 const ticketsRouter = require('./routes/tickets.route');
 const smsRouter = require('./routes/sms.route');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
-
+const usersRouter = require('./routes/users.route');
+app.use('/api/users', usersRouter);
 
 
 console.log('Type de lightningRouter:', typeof require('./routes/lightning.route'));
@@ -34,14 +43,24 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Middleware pour parser le JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Servir les fichiers statiques
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Route pour la page d'accueil
+
+// Exemple de CSP à utiliser dans middleware Express :
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self';" +
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn-script.com;" +
+    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;" +
+    "font-src 'self' https://cdnjs.cloudflare.com;" +
+    "img-src 'self' https://images.unsplash.com data:;"
+  );
+  next();
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/home.html'));
 });
@@ -118,4 +137,7 @@ app.listen(PORT, () => {
   console.log('\n🛠 Système:');
   console.log(`GET    /health                         → Statut du service`);
   console.log(`\n=================================`);
+
+  
 });
+

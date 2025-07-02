@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Événements | TicketSats</title>
+    <link href="./css/style.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    <!-- En-tête -->
+    <header class="bg-white shadow-sm p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">Événements</h1>
+            <div id="user-avatar" class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white"></div>
+        </div>
+    </header>
+
+    <!-- Contenu principal -->
+    <main class="container mx-auto p-4 pb-20">
+        <!-- Filtres -->
+        <div class="flex space-x-3 mb-6 overflow-x-auto pb-2">
+            <button class="filter-btn active" data-category="all">Tous</button>
+            <button class="filter-btn" data-category="concert">Concerts</button>
+            <button class="filter-btn" data-category="sport">Sports</button>
+            <button class="filter-btn" data-category="conference">Conférences</button>
+        </div>
+
+        <!-- Liste des événements -->
+        <div id="events-list" class="space-y-4">
+            <!-- Rempli dynamiquement -->
+            <div class="text-center py-10">
+                <i class="fas fa-spinner fa-spin fa-2x text-blue-500"></i>
+                <p class="mt-2 text-gray-500">Chargement des événements...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Menu de navigation (identique à home.html) -->
+    <script src="./js/events.js"></script>
+</body>
+</html>

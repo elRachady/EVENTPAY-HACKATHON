@@ -21,9 +21,10 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.21",
+    "autoprefixer": "10.4.21",
     "nodemon": "^3.0.1",
-    "postcss": "^8.5.6"
+    "postcss": "8.5.6",
+    "tailwindcss": "4.1.11"
   },
   "keywords": [
     "lightning",
@@ -32,5 +33,14 @@
     "api"
   ],
   "author": "heyolaniran",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elRachady/EVENTPAY-HACKATHON.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/elRachady/EVENTPAY-HACKATHON/issues"
+  },
+  "homepage": "https://github.com/elRachady/EVENTPAY-HACKATHON#readme"
 }

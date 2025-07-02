@@ -19,7 +19,8 @@ router.get('/balance', async (req, res, next) => {
 
 
 // Create Lightning invoice
-router.post('/invoice/create', validateInvoiceCreation, async (req, res, next) => {
+router.post('/invoice/create', async (req, res, next) => {
+  console.log('BODY:', req.body);
   try {
     const { amount, memo, expiry } = req.body;
     const invoice = await lnbitsService.createInvoice(amount, memo, expiry);
