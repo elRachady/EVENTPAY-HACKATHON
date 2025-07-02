@@ -404,37 +404,34 @@
     </nav>
     
     <script>
-        // Simple script for modal handling
-        document.addEventListener('DOMContentLoaded', function() {
-            // Simulate opening the modal when clicking on an event card
-            const eventCards = document.querySelectorAll('.event-card');
-            const ticketModal = document.getElementById('ticketModal');
-            const closeModal = document.getElementById('closeModal');
-            
-            eventCards.forEach(card => {
-                card.addEventListener('click', function() {
-                    ticketModal.classList.remove('hidden');
-                    document.body.style.overflow = 'hidden';
-                });
-            });
-            
-            closeModal.addEventListener('click', function() {
+    document.addEventListener('DOMContentLoaded', function() {
+        const ticketModal = document.getElementById('ticketModal');
+        const closeModal = document.getElementById('closeModal');
+
+        // Délégation : fonctionne même pour les cards ajoutées dynamiquement
+        document.body.addEventListener('click', function(e) {
+            const card = e.target.closest('.event-card');
+            if (card) {
+                ticketModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+        });
+
+        closeModal.addEventListener('click', function() {
+            ticketModal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        });
+
+        ticketModal.addEventListener('click', function(e) {
+            if (e.target === ticketModal) {
                 ticketModal.classList.add('hidden');
                 document.body.style.overflow = 'auto';
-            });
-            
-            // Close modal when clicking outside
-            ticketModal.addEventListener('click', function(e) {
-                if (e.target === ticketModal) {
-                    ticketModal.classList.add('hidden');
-                    document.body.style.overflow = 'auto';
-                }
-            });
+            }
         });
+    });
     </script>
 
-    <script src="./js/script.js"></script>
+    <!-- <script src="./js/script.js"></script> -->
 
-     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </body>
 </html>
