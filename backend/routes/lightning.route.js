@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const lnbitsService = require('../services/lnbits.service');
+const qr = require("qrcode")
 const { validateInvoiceCreation, validatePayment } = require('../middleware/validation');
 
 // Get wallet balance
@@ -25,11 +26,20 @@ router.post('/invoice/create', async (req, res, next) => {
     const { amount, memo, expiry } = req.body;
     const invoice = await lnbitsService.createInvoice(amount, memo, expiry);
     
+    const url = await qr.toDataURL(invoice.payment_request, {
+      errorCorrectionLevel: 'H',
+      type: 'image/png',
+      quality: 0.95,
+      margin: 1,
+      width: 300
+    });
+    console.log('QR CODE URL:', url);
+    console.log('INVOICE:', invoice);
     res.json({
       success: true,
       data: {
         payment_hash: invoice.payment_hash,
-        payment_request: invoice.bolt11,
+        payment_request: invoice.payment_request,
         checking_id: invoice.checking_id,
         amount: amount,
         memo: memo,

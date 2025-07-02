@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3005;
   app.use(express.urlencoded({ extended: true }));
   app.use((req, res, next) => {
     res.removeHeader("Content-Security-Policy");
-  next();
+    next();
 });
 
 // Import des routes
@@ -53,8 +53,8 @@ app.use((req, res, next) => {
     'Content-Security-Policy',
     "default-src 'self';" +
     "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn-script.com;" +
-    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;" +
-    "font-src 'self' https://cdnjs.cloudflare.com;" +
+    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com;" +
+    "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;" +
     "img-src 'self' https://images.unsplash.com data:;"
   );
   next();
@@ -62,8 +62,6 @@ app.use((req, res, next) => {
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/home.html'));
-  res.sendFile(path.join(__dirname, '../public/events.html'));
-  res.sendFile(path.join(__dirname, '../public/mesTickets.html'));
 });
 
 // Routes API
