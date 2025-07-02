@@ -9,10 +9,10 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use((req, res, next) => {
-  res.removeHeader("Content-Security-Policy");
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use((req, res, next) => {
+    res.removeHeader("Content-Security-Policy");
   next();
 });
 
@@ -47,7 +47,6 @@ app.use(limiter);
 // Servir les fichiers statiques
 app.use(express.static(path.join(__dirname, '../public')));
 
-
 // Exemple de CSP à utiliser dans middleware Express :
 app.use((req, res, next) => {
   res.setHeader(
@@ -63,6 +62,8 @@ app.use((req, res, next) => {
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/home.html'));
+  res.sendFile(path.join(__dirname, '../public/events.html'));
+  res.sendFile(path.join(__dirname, '../public/mesTickets.html'));
 });
 
 // Routes API
