@@ -18,7 +18,27 @@ const invoice = ref({
   installmentAmount: route.query.installmentAmount ? Number(route.query.installmentAmount) : undefined,
   address: route.query.address || 'bc1qexampleaddresssatoshipayment',
   qr: route.query.qr || 'bc1qexampleaddresssatoshipayment',
+  expiresAt: route.query.expiresAt || '', // format: '2025-07-03T18:00:00Z'
 })
+
+const now = ref(new Date())
+let interval: number | undefined
+
+if (invoice.value.expiresAt) {
+  interval = setInterval(() => {
+    now.value = new Date()
+  }, 1000)
+}
+
+function getExpirationCountdown() {
+  if (!invoice.value.expiresAt) return ''
+  const expireDate = new Date(invoice.value.expiresAt)
+  const diff = expireDate.getTime() - now.value.getTime()
+  if (diff <= 0) return 'Expiré'
+  const min = Math.floor(diff / 60000)
+  const sec = Math.floor((diff % 60000) / 1000)
+  return `${min}m ${sec < 10 ? '0' : ''}${sec}s`
+}
 
 function copyAddress() {
   navigator.clipboard.writeText(invoice.value.address)
@@ -82,6 +102,10 @@ function shareAddress() {
         <div class="flex justify-between mb-2">
           <span class="font-medium text-gray-700">Équivalent XOF :</span>
           <span class="text-gray-700">≈ {{ invoice.xofAmount.toLocaleString() }} XOF</span>
+        </div>
+        <div v-if="invoice.expiresAt" class="flex justify-between mb-2">
+          <span class="font-medium text-gray-700">Expiration :</span>
+          <span class="text-red-600 font-bold">{{ getExpirationCountdown() }}</span>
         </div>
       </div>
     </div>

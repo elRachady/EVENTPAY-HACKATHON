@@ -28,8 +28,8 @@ const selectCategory = (categoryId: string) => {
         v-for="category in categories"
         :key="category.id"
         @click="selectCategory(category.id)"
-        class="px-4 py-2 bg-white rounded-lg border border-gray-200 whitespace-nowrap text-sm font-medium flex items-center transition-colors hover:border-blue-300"
-        :class="selectedCategory === category.id ? 'border-blue-500 bg-blue-50' : ''"
+        class="px-4 py-2 bg-white rounded-lg border border-gray-200 whitespace-nowrap text-sm font-medium flex items-center transition-colors"
+        :class="selectedCategory === category.id ? 'border-orange-500 bg-orange-100' : ''"
       >
         <i :class="[category.icon, category.color, 'mr-2']"></i> 
         {{ category.name }}

@@ -29,15 +29,20 @@ const handlePayment = (action: string) => {
   if (action === 'installment') {
     showInstallmentInput.value = true
   } else if (action === 'full') {
-    // Redirection vers la page de facture pour paiement en entier
+    // Correction du calcul du montant restant à payer
+    let satsAmount = props.event.price;
+    if (props.event.status === 'En cours de paiement') {
+      satsAmount = props.event.price - 12500;
+    }
+    if (isNaN(satsAmount) || satsAmount <= 0) satsAmount = props.event.price;
     router.push({
       name: 'ticket-invoice',
       query: {
         eventTitle: props.event.title,
         eventDate: props.event.date,
         eventLocation: props.event.location,
-        satsAmount: props.event.price - 12500, // à ajuster selon logique réelle
-        xofAmount: Math.round((props.event.price - 12500) * 0.39),
+        satsAmount: satsAmount,
+        xofAmount: Math.round(satsAmount * 0.39),
         paymentType: 'full',
         address: props.event.address || 'bc1qexampleaddresssatoshipayment',
         qr: props.event.address || 'bc1qexampleaddresssatoshipayment',
@@ -46,16 +51,21 @@ const handlePayment = (action: string) => {
   } else if (action.startsWith('installment-')) {
     // Redirection vers la page de facture pour paiement échelonné
     const amount = parseInt(action.split('-')[1])
+    let maxAmount = props.event.price;
+    if (props.event.status === 'En cours de paiement') {
+      maxAmount = props.event.price - 12500;
+    }
+    const validAmount = (!isNaN(amount) && amount > 0 && amount <= maxAmount) ? amount : maxAmount;
     router.push({
       name: 'ticket-invoice',
       query: {
         eventTitle: props.event.title,
         eventDate: props.event.date,
         eventLocation: props.event.location,
-        satsAmount: amount,
-        xofAmount: Math.round(amount * 0.39),
+        satsAmount: validAmount,
+        xofAmount: Math.round(validAmount * 0.39),
         paymentType: 'installment',
-        installmentAmount: amount,
+        installmentAmount: validAmount,
         address: props.event.address || 'bc1qexampleaddresssatoshipayment',
         qr: props.event.address || 'bc1qexampleaddresssatoshipayment',
       }
@@ -147,13 +157,15 @@ watch(() => props.isOpen, (isOpen) => {
               </div>
             </div>
             
-            <div class="mb-4">
-              <div class="flex justify-between text-sm mb-1">
-                <span>Progression:</span>
-                <span>25% complété</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: 25%"></div>
+            <div v-if="event?.status === 'En cours de paiement'">
+              <div class="mb-4">
+                <div class="flex justify-between text-sm mb-1">
+                  <span>Progression:</span>
+                  <span>25% complété</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: 25%"></div>
+                </div>
               </div>
             </div>
             
@@ -184,7 +196,7 @@ watch(() => props.isOpen, (isOpen) => {
                     </div>
                     <div>
                       <p class="font-medium">Payer en entier</p>
-                      <p class="text-xs text-gray-500">{{ (event?.price - 12500).toLocaleString() }} SATS maintenant</p>
+                      <p class="text-xs text-gray-500">{{ event?.status === 'En cours de paiement' ? (event?.price - 12500).toLocaleString() : event?.price?.toLocaleString() }} SATS maintenant</p>
                     </div>
                   </div>
                   <i class="fas fa-chevron-right text-gray-400"></i>
@@ -212,13 +224,13 @@ watch(() => props.isOpen, (isOpen) => {
                     v-model="installmentAmount"
                     type="number"
                     min="1"
-                    :max="event?.price - 12500"
+                    :max="event?.status === 'En cours de paiement' ? event?.price - 12500 : event?.price"
                     class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-colors"
                     placeholder="Ex: 5000"
                   >
                   <button 
                     class="mt-3 w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-medium transition"
-                    @click="emit('payment', 'installment-' + installmentAmount)"
+                    @click="handlePayment('installment-' + installmentAmount)"
                   >
                     Valider le paiement échelonné
                   </button>
