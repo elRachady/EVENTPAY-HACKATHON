@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('eventpay.db');
+const path = require('path');
+
+const dbPath = path.join(__dirname, '..', '..', 'eventpay.db');
+console.log('DB path used:', dbPath); 
+const db = new sqlite3.Database(dbPath);
 
 // Lister tous les utilisateurs (optionnel)
 router.get('/', (req, res) => {
@@ -27,6 +31,7 @@ router.post('/', (req, res) => {
 // Recherche utilisateur par email et mot de passe (pour login)
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
+  console.log('Tentative login:', email, password); // Ajoute ce log
   if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' });
   db.get('SELECT * FROM users WHERE email = ? AND password = ?', [email, password], (err, user) => {
     if (err) return res.status(500).json({ error: err.message });

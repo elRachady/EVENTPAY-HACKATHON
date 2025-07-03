@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('eventpay.db');
+const path = require('path');
+const dbPath = path.join(__dirname, '..', '..', 'eventpay.db');
+const db = new sqlite3.Database(dbPath);
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
@@ -60,64 +62,62 @@ const validateEventInput = (req, res, next) => {
   next();
 };
 
-// Créer un événement
+// Créer un événement avec plans et partenaires
 router.post('/events', authenticate, validateEventInput, async (req, res) => {
   try {
     if (req.user.role !== 'organizer') {
       throw new Error('Seuls les organisateurs peuvent créer des événements');
     }
 
-    const { name, description, price_fcfa, date, location, image_url, category_ids } = req.body;
-    const price_sats = Math.round(price_fcfa * 0.4); // Conversion FCFA -> SATS
+    const {
+      name, description, category, date, time, location, image_url,
+      multi_plans = 1,
+      ticket_plans = [], // [{type, price_sats, quantity}]
+      partners = []      // [{name, logo, description}]
+    } = req.body;
 
     await dbHelper.beginTransaction();
 
     // Créer l'événement
     const result = await dbHelper.run(
       `INSERT INTO events 
-       (user_id, name, description, price_fcfa, price_sats, date, location, image_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.id, name, description, price_fcfa, price_sats, date, location, image_url]
+       (user_id, name, description, category, date, time, location, image_url, multi_plans)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, name, description, category, date, time, location, image_url, multi_plans]
     );
+    const eventId = result.lastID;
 
-    // Associer les catégories
-    if (category_ids && category_ids.length > 0) {
-      const stmt = await db.prepare(
-        'INSERT INTO event_categories (event_id, category_id) VALUES (?, ?)'
+    // Insérer les plans/tarifs
+    for (const plan of ticket_plans) {
+      await dbHelper.run(
+        `INSERT INTO ticket_plans (event_id, type, price_sats, quantity)
+         VALUES (?, ?, ?, ?)`,
+        [eventId, plan.type, plan.price_sats, plan.quantity]
       );
-      for (const category_id of category_ids) {
-        await stmt.run([result.lastID, category_id]);
-      }
-      await stmt.finalize();
+    }
+
+    // Insérer les partenaires
+    for (const partner of partners) {
+      await dbHelper.run(
+        `INSERT INTO partners (event_id, name, logo, description)
+         VALUES (?, ?, ?, ?)`,
+        [eventId, partner.name, partner.logo, partner.description]
+      );
     }
 
     await dbHelper.commit();
 
-    const newEvent = await dbHelper.get(
-      `SELECT e.*, 
-       GROUP_CONCAT(c.name) as categories
-       FROM events e
-       LEFT JOIN event_categories ec ON e.id = ec.event_id
-       LEFT JOIN categories c ON ec.category_id = c.id
-       WHERE e.id = ?
-       GROUP BY e.id`,
-      [result.lastID]
-    );
-
     res.status(201).json({
       success: true,
-      event: {
-        ...newEvent,
-        categories: newEvent.categories ? newEvent.categories.split(',') : []
-      }
+      event_id: eventId,
+      message: "Événement créé avec succès !"
     });
 
   } catch (error) {
     await dbHelper.rollback();
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message
     });
   }
 });

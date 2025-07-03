@@ -8,6 +8,7 @@ const formData = ref({
   time: '',
   location: '',
   description: '',
+  multiPlans: true, // Ajouté
   tickets: [
     { type: 'Standard', price: '', quantity: '' }
   ],
@@ -24,7 +25,9 @@ const categories = [
 ]
 
 const addTicketType = () => {
-  formData.value.tickets.push({ type: '', price: '', quantity: '' })
+  if (formData.value.multiPlans) {
+    formData.value.tickets.push({ type: '', price: '', quantity: '' })
+  }
 }
 const removeTicketType = (index: number) => {
   if (formData.value.tickets.length > 1) formData.value.tickets.splice(index, 1)
@@ -37,9 +40,34 @@ const removePartner = (index: number) => {
   if (formData.value.partners.length > 1) formData.value.partners.splice(index, 1)
 }
 
-const submitForm = () => {
-  console.log('Creating event:', formData.value)
-  // Add form submission logic here
+const confirmation = ref('')
+const error = ref('')
+const loading = ref(false)
+
+const submitForm = async () => {
+  confirmation.value = ''
+  error.value = ''
+  loading.value = true
+  try {
+    const token = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).auth_token : ''
+    const res = await fetch('http://localhost:3005/api/tickets/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(formData.value)
+    })
+    const data = await res.json()
+    if (res.ok && data.success) {
+      confirmation.value = data.message || 'Événement créé avec succès !'
+    } else {
+      error.value = data.error || 'Erreur lors de la création'
+    }
+  } catch (e) {
+    error.value = 'Erreur réseau'
+  }
+  loading.value = false
 }
 
 const handleFileUpload = (event: Event) => {
@@ -74,7 +102,7 @@ const fileInput = ref(null)
     </div>
 
     <h1 class="text-2xl font-bold text-gray-800 mb-6">Créer un événement</h1>
-    
+
     <form @submit.prevent="submitForm" class="space-y-6">
       <!-- Informations de base -->
       <div class="bg-white rounded-xl p-6 shadow-sm">
@@ -136,6 +164,19 @@ const fileInput = ref(null)
             >
           </div>
         </div>
+      </div>
+
+      <!-- Activer plusieurs plans -->
+      <div class="flex items-center mb-4">
+        <input
+          id="multiPlans"
+          type="checkbox"
+          v-model="formData.multiPlans"
+          class="mr-2"
+        >
+        <label for="multiPlans" class="text-sm font-medium text-gray-700">
+          Activer plusieurs plans (VIP, Premium, Pass, etc.)
+        </label>
       </div>
 
       <!-- Billetterie -->
@@ -229,9 +270,16 @@ const fileInput = ref(null)
       <button 
         type="submit" 
         class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-medium transition"
+        :disabled="loading"
       >
-        Créer l'événement
+        {{ loading ? 'Création...' : 'Créer l\'événement' }}
       </button>
+      <div v-if="confirmation" class="mt-4 text-green-600 font-bold">
+        {{ confirmation }}
+      </div>
+      <div v-if="error" class="mt-4 text-red-600 font-bold">
+        {{ error }}
+      </div>
     </form>
   </div>
 </template>
