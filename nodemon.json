@@ -1,5 +1,0 @@
-{
-    "watch" :["middleware", "services", "routes"],
-    "ext": "js,json",
-    "exec": "node main.js"
-}

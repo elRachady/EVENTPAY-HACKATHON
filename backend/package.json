@@ -1,0 +1,47 @@
+{
+  "name": "ticketsats-backend",
+  "version": "1.0.0",
+  "description": "API backend for TicketSats Benin with Lightning Network integration",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "node src/main.cjs",
+    "dev": "nodemon src/main.cjs",
+    "migrate": "node src/utils/db/migrations.js",
+    "test": "NODE_ENV=test jest"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.11.2",
+    "helmet": "^7.2.0",
+    "lnbits": "^1.1.0",
+    "qrcode": "^1.5.4",
+    "sqlite3": "^5.1.7",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
+  },
+  "keywords": [
+    "lightning-network",
+    "bitcoin",
+    "ticketing",
+    "benin",
+    "lnbits"
+  ],
+  "author": "heyolaniran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elRachady/EVENTPAY-HACKATHON.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elRachady/EVENTPAY-HACKATHON/issues"
+  },
+  "homepage": "https://github.com/elRachady/EVENTPAY-HACKATHON#readme"
+}
