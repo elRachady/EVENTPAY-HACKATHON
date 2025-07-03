@@ -9,6 +9,7 @@ import CompletedTicketsView from './views/CompletedTicketsView.vue'
 import MyEventsView from './views/MyEventsView.vue'
 import CreateEventView from './views/CreateEventView.vue'
 import TicketInvoiceView from './views/TicketInvoiceView.vue'
+import AccountDetailsView from './views/AccountDetailsView.vue'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -18,6 +19,7 @@ const routes = [
   { path: '/my-events', name: 'my-events', component: MyEventsView },
   { path: '/create-event', name: 'create-event', component: CreateEventView },
   { path: '/ticket-invoice', name: 'ticket-invoice', component: TicketInvoiceView },
+  { path: '/account', name: 'account', component: AccountDetailsView },
 ]
 
 const router = createRouter({
