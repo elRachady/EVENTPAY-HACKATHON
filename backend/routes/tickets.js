@@ -40,4 +40,15 @@ router.post('/:id/purchase', async (req, res) => {
   });
 });
 
+const { generateSecureTicket } = require('../services/ticketService');
+
+// Après un paiement réussi
+router.post('/:id/issue', async (req, res) => {
+  const { id } = req.params;
+  const { buyer_ln_address, amount_paid, total_amount } = req.body;
+
+  const ticket = await generateSecureTicket(id, buyer_ln_address, amount_paid, total_amount);
+  res.json(ticket);
+});
+
 module.exports = router;

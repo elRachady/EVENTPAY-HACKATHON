@@ -13,6 +13,16 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/validate', require('./routes/validation'));
 app.use('/api/payouts', require('./routes/payouts'));
 
+// Ajouter après les autres routes
+app.use('/api/organizer', require('./routes/organizer'));
+app.use('/api/webhooks', require('./routes/webhooks'));
+
+// Gestion des erreurs
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Erreur serveur' });
+});
+
 // Démarrer le serveur
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
