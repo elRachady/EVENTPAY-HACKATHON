@@ -37,6 +37,54 @@ const events = ref([
   }
 ])
 
+const mastermindPasses = ref([
+  {
+    id: '5-student',
+    title: 'Bitcoin Mastermind 2025 - Student Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 18000,
+    category: 'Conference',
+    passType: 'Student Pass',
+    installmentAvailable: false,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  },
+  {
+    id: '5-semi',
+    title: 'Bitcoin Mastermind 2025 - Semi Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 58000,
+    category: 'Conference',
+    passType: 'Semi Pass',
+    installmentAvailable: false,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  },
+  {
+    id: '5-full',
+    title: 'Bitcoin Mastermind 2025 - Full Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 98000,
+    category: 'Conference',
+    passType: 'Full Pass',
+    installmentAvailable: false,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  }
+])
+
 const isModalOpen = ref(false)
 const selectedEvent = ref<any>(null)
 
@@ -71,7 +119,22 @@ const closeModal = () => {
   <div class="container mx-auto px-4 py-4">
     <SearchBar @search="handleSearch" />
     <CategoryFilter @category-change="handleCategoryChange" />
-    
+
+    <!-- Bitcoin Mastermind 2025 Passes Horizontal Scroll -->
+    <div v-if="mastermindPasses.length" class="mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-2">Bitcoin Mastermind 2025 - Pass</h2>
+      <div class="flex space-x-4 overflow-x-auto pb-2">
+        <EventCard
+          v-for="pass in mastermindPasses"
+          :key="pass.id"
+          :event="pass"
+          class="min-w-[260px] max-w-xs flex-shrink-0"
+          @card-click="handleEventClick"
+          @action-click="handleEventAction"
+        />
+      </div>
+    </div>
+
     <div class="grid gap-4">
       <EventCard 
         v-for="event in events"

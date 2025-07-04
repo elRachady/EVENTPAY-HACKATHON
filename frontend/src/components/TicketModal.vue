@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import EventPartnersModal from './EventPartnersModal.vue'
+import api from '../api'
 
 interface Props {
   isOpen: boolean
@@ -20,58 +21,56 @@ const modalRef = ref<HTMLElement>()
 const showInstallmentInput = ref(false)
 const installmentAmount = ref('')
 const showPartners = ref(false)
+const isLoading = ref(false)
+const errorMsg = ref('')
 
 const closeModal = () => {
   emit('close')
 }
 
-const handlePayment = (action: string) => {
+const handlePayment = async (action: string) => {
+  errorMsg.value = ''
   if (action === 'installment') {
     showInstallmentInput.value = true
-  } else if (action === 'full') {
-    // Correction du calcul du montant restant à payer
-    let satsAmount = props.event.price;
-    if (props.event.status === 'En cours de paiement') {
-      satsAmount = props.event.price - 12500;
+  } else if (action === 'full' || action.startsWith('installment-')) {
+    isLoading.value = true
+    let satsAmount = 0
+    if (action === 'full') {
+      satsAmount = props.event.status === 'En cours de paiement' ? props.event.price - 12500 : props.event.price
+    } else if (action.startsWith('installment-')) {
+      const amount = parseInt(action.split('-')[1])
+      let maxAmount = props.event.status === 'En cours de paiement' ? props.event.price - 12500 : props.event.price
+      satsAmount = (!isNaN(amount) && amount > 0 && amount <= maxAmount) ? amount : maxAmount
     }
-    if (isNaN(satsAmount) || satsAmount <= 0) satsAmount = props.event.price;
-    router.push({
-      name: 'ticket-invoice',
-      query: {
-        eventTitle: props.event.title,
-        eventDate: props.event.date,
-        eventLocation: props.event.location,
-        satsAmount: satsAmount,
-        xofAmount: Math.round(satsAmount * 0.39),
-        paymentType: 'full',
-        address: props.event.address || 'bc1qexampleaddresssatoshipayment',
-        qr: props.event.address || 'bc1qexampleaddresssatoshipayment',
-      }
-    })
-  } else if (action.startsWith('installment-')) {
-    // Redirection vers la page de facture pour paiement échelonné
-    const amount = parseInt(action.split('-')[1])
-    let maxAmount = props.event.price;
-    if (props.event.status === 'En cours de paiement') {
-      maxAmount = props.event.price - 12500;
+    try {
+      const res = await api.post('/lightning/invoice/create', {
+        amount: satsAmount,
+        eventId: props.event.id,
+        eventTitle: props.event.title
+      })
+      // FIX: Use res.data.data instead of res.data
+      const { payment_request, payment_hash } = res.data.data
+      router.push({
+        name: 'ticket-invoice',
+        query: {
+          eventTitle: props.event.title,
+          eventDate: props.event.date,
+          eventLocation: props.event.location,
+          satsAmount: satsAmount,
+          xofAmount: Math.round(satsAmount * 0.39),
+          paymentType: action === 'full' ? 'full' : 'installment',
+          installmentAmount: action === 'full' ? undefined : satsAmount,
+          paymentRequest: payment_request,
+          paymentHash: payment_hash
+        }
+      })
+    } catch (err: any) {
+      errorMsg.value = err?.response?.data?.message || 'Erreur lors de la création de la facture.'
+    } finally {
+      isLoading.value = false
+      showInstallmentInput.value = false
+      installmentAmount.value = ''
     }
-    const validAmount = (!isNaN(amount) && amount > 0 && amount <= maxAmount) ? amount : maxAmount;
-    router.push({
-      name: 'ticket-invoice',
-      query: {
-        eventTitle: props.event.title,
-        eventDate: props.event.date,
-        eventLocation: props.event.location,
-        satsAmount: validAmount,
-        xofAmount: Math.round(validAmount * 0.39),
-        paymentType: 'installment',
-        installmentAmount: validAmount,
-        address: props.event.address || 'bc1qexampleaddresssatoshipayment',
-        qr: props.event.address || 'bc1qexampleaddresssatoshipayment',
-      }
-    })
-    showInstallmentInput.value = false
-    installmentAmount.value = ''
   } else {
     emit('payment', action)
     showInstallmentInput.value = false
@@ -108,7 +107,7 @@ watch(() => props.isOpen, (isOpen) => {
         </div>
         <div class="p-4">
           <div class="rounded-xl overflow-hidden mb-4">
-            <img :src="event?.image" :alt="event?.title" class="w-full h-48 object-cover">
+            <img :src="event?.id && event.id.startsWith('5-') ? '/src/assets/bitcoinmastermind.jpg' : event?.image" :alt="event?.title" class="w-full h-48 object-cover">
           </div>
           
           <div class="mb-6">
@@ -327,4 +326,6 @@ watch(() => props.isOpen, (isOpen) => {
     :isOpen="showPartners" 
     @close="showPartners = false" 
   />
+  <div v-if="errorMsg" class="bg-red-100 text-red-700 rounded p-2 mb-2 text-sm">{{ errorMsg }}</div>
+  <div v-if="isLoading" class="flex items-center justify-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i> Génération de la facture...</div>
 </template>

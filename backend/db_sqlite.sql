@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   email TEXT UNIQUE,
   phone TEXT,
+  password TEXT,         -- <== à ajouter
+  role TEXT,             -- <== à ajouter
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

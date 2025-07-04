@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const dotenv = require('dotenv');
+const multer = require('multer');
 
 // Charge .env à la racine de /backend
 dotenv.config();
@@ -58,6 +59,30 @@ app.use('/api/lightning', lightningRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/sms', smsRouter);
 app.use('/api/users', usersRouter);
+
+// Configuration du stockage pour les images uploadées
+env = process.env.NODE_ENV || 'development';
+const uploadDir = path.join(__dirname, '../../frontend/public/uploads');
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/\s+/g, '_'));
+  }
+});
+const upload = multer({ storage });
+
+// Route d'upload d'image d'événement
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Aucun fichier envoyé' });
+  }
+  // URL accessible depuis le frontend
+  const imageUrl = `/uploads/${req.file.filename}`;
+  res.json({ imageUrl });
+});
 
 // Servir le frontend en production
 if (process.env.NODE_ENV === 'production') {

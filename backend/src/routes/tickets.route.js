@@ -63,9 +63,10 @@ const validateEventInput = (req, res, next) => {
 // Créer un événement
 router.post('/events', authenticate, validateEventInput, async (req, res) => {
   try {
-    if (req.user.role !== 'organizer') {
-      throw new Error('Seuls les organisateurs peuvent créer des événements');
-    }
+    // Suppression de la restriction de rôle
+    // if (req.user.role !== 'organizer') {
+    //   throw new Error('Seuls les organisateurs peuvent créer des événements');
+    // }
 
     const { name, description, price_fcfa, date, location, image_url, category_ids } = req.body;
     const price_sats = Math.round(price_fcfa * 0.4); // Conversion FCFA -> SATS

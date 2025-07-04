@@ -6,6 +6,7 @@ import EventCard from '../components/EventCard.vue'
 import TicketModal from '../components/TicketModal.vue'
 
 const featuredEvents = ref([
+
   {
     id: '1',
     title: 'Concert Yemi Alade',
@@ -16,16 +17,7 @@ const featuredEvents = ref([
     category: 'Concerts',
     installmentAvailable: true
   },
-  {
-    id: '2',
-    title: 'Championnat National de Football',
-    location: 'Stade de l’Amitié',
-    date: '20 Juil',
-    image: 'https://images.unsplash.com/photo-1505843273132-bc5c6e6e6c8e?auto=format&fit=crop&w=500&q=80',
-    price: 5000,
-    category: 'Sports',
-    installmentAvailable: false
-  }
+
 ])
 
 const upcomingEvents = ref([
@@ -38,24 +30,7 @@ const upcomingEvents = ref([
     price: 10000,
     category: 'Conférences',
   },
-  {
-    id: '4',
-    title: 'Festival Wémèxwé',
-    location: 'Sè',
-    date: '18-20 Août',
-    image: 'https://images.unsplash.com/photo-1509395176047-4a66953fd231?auto=format&fit=crop&w=500&q=80',
-    price: 8000,
-    category: 'Festivals',
-  },
-  {
-    id: '5',
-    title: 'Fête du Vodoun',
-    location: 'Ouidah',
-    date: '10 Janv',
-    image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=500&q=80',
-    price: 0,
-    category: 'Festivals',
-  },
+
   {
     id: '6',
     title: 'Salon International du Tourisme',
@@ -82,6 +57,57 @@ const ticketsEnCours = ref([
   }
 ])
 
+const mastermindPasses = ref([
+  {
+    id: '5-student',
+    title: 'Bitcoin Mastermind 2025 - Student Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4-6 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 18000,
+    category: 'Conference',
+    passType: 'Student Pass',
+    installmentAvailable: false,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  },
+  {
+    id: '5-semi',
+    title: 'Bitcoin Mastermind 2025 - Semi Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4-6 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 58000,
+    category: 'Conference',
+    passType: 'Semi Pass',
+    installmentAvailable: false,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  },
+  {
+    id: '5-full',
+    title: 'Bitcoin Mastermind 2025 - Full Pass',
+    location: 'AZALAÏ HOTEL COTONOU - Bénin',
+    date: '4-6 Juillet',
+    image: '/src/assets/bitcoinmastermind.jpg',
+    price: 98000,
+    category: 'Conference',
+    passType: 'Full Pass',
+    installmentAvailable: false,
+    status: 'En cours de paiement',
+    progress: 25000, // exemple d'acompte déjà payé
+    amountPaid: 25000,
+    partners: [
+      { name: 'Izichange', logo: '/src/assets/Izichange.png' },
+      { name: 'Flash', logo: '/src/assets/Flash.png' }
+    ]
+  }
+])
+
 const isModalOpen = ref(false)
 const selectedEvent = ref<any>(null)
 
@@ -99,7 +125,10 @@ const handleEventClick = (eventId: string) => {
 
 const handleEventAction = (eventId: string, action: string) => {
   if (action === 'pay' || action === 'reserve') {
-    let ticket = ticketsEnCours.value.find(t => t.id === eventId) || featuredEvents.value.find(e => e.id === eventId) || upcomingEvents.value.find(e => e.id === eventId)
+    let ticket = ticketsEnCours.value.find(t => t.id === eventId)
+      || featuredEvents.value.find(e => e.id === eventId)
+      || upcomingEvents.value.find(e => e.id === eventId)
+      || mastermindPasses.value.find(e => e.id === eventId); // <-- add this line
     selectedEvent.value = ticket
     isModalOpen.value = true
   } else {
@@ -116,7 +145,25 @@ const closeModal = () => {
   <div class="container mx-auto px-4 py-4">
     <SearchBar @search="handleSearch" />
     <CategoryFilter @category-change="handleCategoryChange" />
-    
+
+    <!-- Bitcoin Mastermind 2025 Passes Horizontal Scroll -->
+    <div v-if="mastermindPasses.length" class="mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-2">Bitcoin Mastermind 2025 - Pass</h2>
+      <div class="flex space-x-4 overflow-x-auto pb-2">
+        <EventCard
+          v-for="pass in mastermindPasses"
+          :key="pass.id"
+          :event="pass"
+          class="min-w-[260px] max-w-xs flex-shrink-0"
+          :show-progress="pass.status === 'En cours de paiement'"
+          :progress="pass.progress"
+          :amount-paid="pass.amountPaid"
+          @card-click="handleEventClick"
+          @action-click="handleEventAction"
+        />
+      </div>
+    </div>
+
     <!-- Tickets en cours de paiement -->
     <div v-if="ticketsEnCours.length" class="mb-6">
       <div class="flex justify-between items-center mb-3">

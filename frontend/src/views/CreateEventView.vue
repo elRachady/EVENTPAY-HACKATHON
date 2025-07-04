@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import api from '../api'
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const formData = ref({
   name: '',
@@ -12,8 +16,9 @@ const formData = ref({
     { type: 'Standard', price: '', quantity: '' }
   ],
   partners: [
-    { name: '', logo: '', description: '' }
-  ]
+    { name: '', logo: '' }
+  ],
+  image: null
 })
 
 const categories = [
@@ -31,22 +36,67 @@ const removeTicketType = (index: number) => {
 }
 
 const addPartner = () => {
-  formData.value.partners.push({ name: '', logo: '', description: '' })
+  formData.value.partners.push({ name: '', logo: '' })
 }
 const removePartner = (index: number) => {
   if (formData.value.partners.length > 1) formData.value.partners.splice(index, 1)
 }
 
-const submitForm = () => {
-  console.log('Creating event:', formData.value)
-  // Add form submission logic here
+const error = ref('')
+const success = ref('')
+
+const submitForm = async () => {
+  error.value = ''
+  success.value = ''
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!user || user.role !== 'organizer') {
+      error.value = "Seuls les organisateurs peuvent créer des événements."
+      return
+    }
+    let imageUrl = ''
+    if (formData.value.image) {
+      const imgData = new FormData()
+      imgData.append('image', formData.value.image)
+      const uploadRes = await api.post('/upload', imgData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      imageUrl = uploadRes.data.imageUrl
+    }
+    const mainTicket = formData.value.tickets[0]
+    const payload = {
+      name: formData.value.name,
+      description: formData.value.description,
+      price_fcfa: mainTicket.price,
+      date: formData.value.date + (formData.value.time ? (' ' + formData.value.time) : ''),
+      location: formData.value.location,
+      image_url: imageUrl,
+      category_ids: [formData.value.category]
+    }
+    await api.post('/tickets/events', payload, {
+      headers: {
+        Authorization: `Bearer ${user.auth_token || ''}`
+      }
+    })
+    success.value = "Événement créé avec succès !"
+    setTimeout(() => router.push('/my-events'), 1500)
+  } catch (e: any) {
+    error.value = e.response?.data?.error || 'Erreur lors de la création de l\'événement.'
+  }
 }
+
+const imagePreview = ref<string | null>(null)
 
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) {
-    console.log('File uploaded:', target.files[0])
-    // Add file upload logic here
+    formData.value.image = target.files[0]
+    // Afficher un aperçu de l'image sélectionnée
+    const reader = new FileReader()
+    reader.onload = e => {
+      imagePreview.value = e.target?.result as string
+    }
+    reader.readAsDataURL(target.files[0])
   }
 }
 
@@ -163,19 +213,6 @@ const fileInput = ref(null)
         </div>
       </div>
 
-      <!-- Description -->
-      <div class="bg-white rounded-xl p-6 shadow-sm">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">Description</h2>
-        
-        <div>
-          <textarea 
-            v-model="formData.description"
-            class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 h-32 transition-colors" 
-            placeholder="Décrivez votre événement..."
-          ></textarea>
-        </div>
-      </div>
-
       <!-- Image -->
       <div class="bg-white rounded-xl p-6 shadow-sm">
         <h2 class="text-lg font-semibold text-gray-800 mb-4">Image de l'événement</h2>
@@ -186,7 +223,7 @@ const fileInput = ref(null)
           <button 
             type="button" 
             class="text-blue-500 font-medium text-sm mt-1 hover:text-blue-600"
-            @click="fileInput.value && fileInput.value.click()"
+            @click="fileInput && fileInput.click()"
           >
             parcourir vos fichiers
           </button>
@@ -197,6 +234,9 @@ const fileInput = ref(null)
             accept="image/*"
             @change="handleFileUpload"
           >
+          <div v-if="imagePreview" class="mt-4 flex justify-center">
+            <img :src="imagePreview" alt="Aperçu de l'image" class="max-h-40 rounded-lg shadow" />
+          </div>
         </div>
       </div>
 
@@ -204,7 +244,7 @@ const fileInput = ref(null)
       <div class="bg-white rounded-xl p-6 shadow-sm">
         <h2 class="text-lg font-semibold text-gray-800 mb-4">Partenaires</h2>
         <div class="space-y-4">
-          <div v-for="(partner, idx) in formData.partners" :key="idx" class="grid grid-cols-3 gap-4 items-end">
+          <div v-for="(partner, idx) in formData.partners" :key="idx" class="grid grid-cols-2 gap-4 items-end">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nom du partenaire</label>
               <input v-model="partner.name" type="text" class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-black focus:ring-2 focus:ring-black transition-colors" placeholder="Nom du partenaire" required>
@@ -213,17 +253,27 @@ const fileInput = ref(null)
               <label class="block text-sm font-medium text-gray-700 mb-1">Logo (URL)</label>
               <input v-model="partner.logo" type="text" class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-black focus:ring-2 focus:ring-black transition-colors" placeholder="Lien du logo">
             </div>
-            <div class="flex items-end space-x-2">
-              <div class="flex-1">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <input v-model="partner.description" type="text" class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-black focus:ring-2 focus:ring-black transition-colors" placeholder="Description courte">
-              </div>
-              <button type="button" @click="removePartner(idx)" v-if="formData.partners.length > 1" class="ml-2 text-red-500 hover:text-red-700 text-lg font-bold">&times;</button>
-            </div>
+            <button type="button" @click="removePartner(idx)" v-if="formData.partners.length > 1" class="ml-2 text-red-500 hover:text-red-700 text-lg font-bold">&times;</button>
           </div>
           <button type="button" @click="addPartner" class="mt-2 px-4 py-2 rounded-lg bg-black text-white font-medium hover:bg-gray-900 transition">+ Ajouter un partenaire</button>
         </div>
       </div>
+
+      <!-- Bloc Description réintégré -->
+      <div class="bg-white rounded-xl p-6 shadow-sm">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Description</h2>
+        <div>
+          <textarea 
+            v-model="formData.description"
+            class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 h-32 transition-colors" 
+            placeholder="Décrivez votre événement..."
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- Error and Success Messages -->
+      <div v-if="error" class="text-red-500 text-sm mt-4">{{ error }}</div>
+      <div v-if="success" class="text-green-500 text-sm mt-4">{{ success }}</div>
 
       <!-- Submit Button -->
       <button 
