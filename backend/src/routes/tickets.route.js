@@ -124,7 +124,7 @@ router.post('/events', authenticate, validateEventInput, async (req, res) => {
 });
 
 // Réserver un billet
-router.post('/tickets', authenticate, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
     const { event_id, ticket_type = 'standard' } = req.body;
 

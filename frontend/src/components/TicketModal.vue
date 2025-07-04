@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import EventPartnersModal from './EventPartnersModal.vue'
 import api from '../api'
+import { useStorage } from '@vueuse/core'
 
 interface Props {
   isOpen: boolean
@@ -24,6 +25,9 @@ const showPartners = ref(false)
 const isLoading = ref(false)
 const errorMsg = ref('')
 
+// Store/retrieve ticketId for the current event
+const ticketIdStore = useStorage('currentTicketId_' + (props.event?.id || ''), null)
+
 const closeModal = () => {
   emit('close')
 }
@@ -39,17 +43,30 @@ const handlePayment = async (action: string) => {
       satsAmount = props.event.status === 'En cours de paiement' ? props.event.price - 12500 : props.event.price
     } else if (action.startsWith('installment-')) {
       const amount = parseInt(action.split('-')[1])
+      if (!amount || isNaN(amount) || amount <= 0) {
+        errorMsg.value = 'Veuillez saisir un montant valide.'
+        isLoading.value = false
+        return
+      }
       let maxAmount = props.event.status === 'En cours de paiement' ? props.event.price - 12500 : props.event.price
-      satsAmount = (!isNaN(amount) && amount > 0 && amount <= maxAmount) ? amount : maxAmount
+      satsAmount = (amount > 0 && amount <= maxAmount) ? amount : maxAmount
     }
     try {
-      const res = await api.post('/lightning/invoice/create', {
-        amount: satsAmount,
-        eventId: props.event.id,
-        eventTitle: props.event.title
+      let ticketId = ticketIdStore.value
+      // 1. Only create a new ticket if none exists for this event/user
+      if (!ticketId) {
+        const ticketRes = await api.post('/tickets', {
+          event_id: props.event.id,
+          ticket_type: 'standard'
+        })
+        ticketId = ticketRes.data.ticket.id
+        ticketIdStore.value = ticketId
+      }
+      // 2. Generate Lightning invoice for this ticket using the correct endpoint
+      const res = await api.post(`/tickets/${ticketId}/invoices`, {
+        amount: satsAmount
       })
-      // FIX: Use res.data.data instead of res.data
-      const { payment_request, payment_hash } = res.data.data
+      const { payment_request, payment_hash } = res.data.invoice
       router.push({
         name: 'ticket-invoice',
         query: {
@@ -61,7 +78,8 @@ const handlePayment = async (action: string) => {
           paymentType: action === 'full' ? 'full' : 'installment',
           installmentAmount: action === 'full' ? undefined : satsAmount,
           paymentRequest: payment_request,
-          paymentHash: payment_hash
+          paymentHash: payment_hash,
+          ticketId: ticketId
         }
       })
     } catch (err: any) {
@@ -75,6 +93,18 @@ const handlePayment = async (action: string) => {
     emit('payment', action)
     showInstallmentInput.value = false
     installmentAmount.value = ''
+  }
+}
+
+const isInstallmentValid = computed(() => {
+  const amt = parseInt((installmentAmount.value || '').toString().trim())
+  let max = props.event.status === 'En cours de paiement' ? props.event.price - 12500 : props.event.price
+  return amt > 0 && amt <= max
+})
+
+const handleInstallmentEnter = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && isInstallmentValid.value) {
+    handlePayment('installment-' + installmentAmount.value.toString().trim())
   }
 }
 
@@ -226,13 +256,16 @@ watch(() => props.isOpen, (isOpen) => {
                     :max="event?.status === 'En cours de paiement' ? event?.price - 12500 : event?.price"
                     class="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-colors"
                     placeholder="Ex: 5000"
+                    @keyup.enter="handleInstallmentEnter"
                   >
                   <button 
                     class="mt-3 w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-medium transition"
-                    @click="handlePayment('installment-' + installmentAmount)"
+                    :disabled="!isInstallmentValid"
+                    @click="handlePayment('installment-' + installmentAmount.toString().trim())"
                   >
                     Valider le paiement échelonné
                   </button>
+                  <div v-if="errorMsg" class="text-red-600 text-xs mt-2">{{ errorMsg }}</div>
                 </div>
               </div>
             </div>
