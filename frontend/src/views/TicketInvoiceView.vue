@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 // import QRCodeVue from 'qrcode.vue'
 
 const route = useRoute()
-const router = useRouter()
+
 
 // Props or route params for invoice data
 const invoice = ref({

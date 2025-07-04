@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import logo from '../assets/logo.png'
+const emit = defineEmits(['show-account'])
 </script>
 
 <template>
@@ -13,7 +14,10 @@ import logo from '../assets/logo.png'
           <button class="bg-black bg-opacity-5 p-2 rounded-full hover:bg-opacity-10 transition-colors">
             <i class="fas fa-bell text-black"></i>
           </button>
-          <div class="w-8 h-8 rounded-full bg-black bg-opacity-5 flex items-center justify-center hover:bg-opacity-10 transition-colors cursor-pointer">
+          <div
+            class="w-8 h-8 rounded-full bg-black bg-opacity-5 flex items-center justify-center hover:bg-opacity-10 transition-colors cursor-pointer"
+            @click="emit('show-account')"
+          >
             <i class="fas fa-user text-black"></i>
           </div>
         </div>

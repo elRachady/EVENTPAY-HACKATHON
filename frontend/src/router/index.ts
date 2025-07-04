@@ -19,6 +19,7 @@ const routes = [
   { path: '/my-events', name: 'my-events', component: MyEventsView },
   { path: '/create-event', name: 'create-event', component: CreateEventView },
   { path: '/ticket-invoice', name: 'ticket-invoice', component: TicketInvoiceView },
+
 ]
 
 const router = createRouter({

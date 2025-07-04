@@ -1,9 +1,13 @@
+// main.cjs
+// Ce fichier est le point d'entrée de l'application backend
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const dotenv = require('dotenv');
+
 
 // Charge .env à la racine de /backend
 dotenv.config();
@@ -16,6 +20,8 @@ const PORT = process.env.PORT || 3005;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
+
+
 
 // Configuration CORS
 app.use(cors({
@@ -41,6 +47,8 @@ const lightningRouter = require('./routes/lightning.route.js');
 const ticketsRouter = require('./routes/tickets.route.js');
 const smsRouter = require('./routes/sms.route.js');
 const usersRouter = require('./routes/users.route.js');
+const uploadRouter = require('./routes/upload.route.js');
+const eventRouter = require('./routes/events.route.js');
 
 // Configuration LNbits (doit être AVANT les routes)
 app.use((req, res, next) => {
@@ -53,11 +61,21 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+  setHeaders: (res) => {
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
+
+console.log('Chemin vers uploads:', path.join(__dirname, '..', 'uploads'));
+
 // Routes API
 app.use('/api/lightning', lightningRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/sms', smsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/upload', uploadRouter);
+app.use('/api/events', eventRouter);
 
 // Servir le frontend en production
 if (process.env.NODE_ENV === 'production') {
@@ -132,3 +150,4 @@ app.listen(PORT, () => {
   console.log(`GET    /api/health                         → Statut du service`);
   console.log(`\n=================================`);
 });
+

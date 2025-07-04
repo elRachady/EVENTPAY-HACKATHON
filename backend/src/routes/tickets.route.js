@@ -1,152 +1,192 @@
 const express = require('express');
 const router = express.Router();
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 const dbPath = path.join(__dirname, '..', '..', 'eventpay.db');
 const db = new sqlite3.Database(dbPath);
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-// Helper pour les opérations asynchrones sur la base de données
+// dbHelper amélioré avec gestion des erreurs
 const dbHelper = {
   get: (query, params) => new Promise((resolve, reject) => {
-    db.get(query, params, (err, row) => err ? reject(err) : resolve(row));
+    db.get(query, params, (err, row) => {
+      if (err) {
+        console.error('DB Error (get):', err);
+        return reject(err);
+      }
+      resolve(row);
+    });
   }),
   run: (query, params) => new Promise((resolve, reject) => {
     db.run(query, params, function(err) {
-      err ? reject(err) : resolve(this);
+      if (err) {
+        console.error('DB Error (run):', err);
+        return reject(err);
+      }
+      resolve(this);
     });
   }),
   all: (query, params) => new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => err ? reject(err) : resolve(rows));
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        console.error('DB Error (all):', err);
+        return reject(err);
+      }
+      resolve(rows);
+    });
   }),
   beginTransaction: () => new Promise((resolve, reject) => {
-    db.run('BEGIN TRANSACTION', (err) => err ? reject(err) : resolve());
+    db.run('BEGIN TRANSACTION', (err) => {
+      if (err) {
+        console.error('DB Error (beginTransaction):', err);
+        return reject(err);
+      }
+      resolve();
+    });
   }),
   commit: () => new Promise((resolve, reject) => {
-    db.run('COMMIT', (err) => err ? reject(err) : resolve());
+    db.run('COMMIT', (err) => {
+      if (err) {
+        console.error('DB Error (commit):', err);
+        return reject(err);
+      }
+      resolve();
+    });
   }),
   rollback: () => new Promise((resolve, reject) => {
-    db.run('ROLLBACK', (err) => err ? reject(err) : resolve());
-  })
+    db.run('ROLLBACK', (err) => {
+      if (err) console.error('DB Error (rollback):', err);
+      resolve(); // On résout toujours pour permettre le traitement post-rollback
+    });
+  }),
 };
 
-// Middleware d'authentification
+// Middleware d'authentification amélioré
 const authenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    if (!token) throw new Error('Token manquant');
+    if (!token) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Token manquant',
+        code: 'MISSING_TOKEN'
+      });
+    }
 
     const user = await dbHelper.get(
       'SELECT id, email, role FROM users WHERE auth_token = ?',
       [token]
     );
-    if (!user) throw new Error('Utilisateur non trouvé');
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Utilisateur non trouvé',
+        code: 'USER_NOT_FOUND'
+      });
+    }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: error.message });
-  }
-};
-
-// Middleware de validation d'événement
-const validateEventInput = (req, res, next) => {
-  const { name, price_fcfa, date, location } = req.body;
-  if (!name || !price_fcfa || !date || !location) {
-    return res.status(400).json({ 
-      error: 'Champs manquants',
-      required: ['name', 'price_fcfa', 'date', 'location']
-    });
-  }
-  next();
-};
-
-// Créer un événement avec plans et partenaires
-router.post('/events', authenticate, validateEventInput, async (req, res) => {
-  try {
-    if (req.user.role !== 'organizer') {
-      throw new Error('Seuls les organisateurs peuvent créer des événements');
-    }
-
-    const {
-      name, description, category, date, time, location, image_url,
-      multi_plans = 1,
-      ticket_plans = [], // [{type, price_sats, quantity}]
-      partners = []      // [{name, logo, description}]
-    } = req.body;
-
-    await dbHelper.beginTransaction();
-
-    // Créer l'événement
-    const result = await dbHelper.run(
-      `INSERT INTO events 
-       (user_id, name, description, category, date, time, location, image_url, multi_plans)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.id, name, description, category, date, time, location, image_url, multi_plans]
-    );
-    const eventId = result.lastID;
-
-    // Insérer les plans/tarifs
-    for (const plan of ticket_plans) {
-      await dbHelper.run(
-        `INSERT INTO ticket_plans (event_id, type, price_sats, quantity)
-         VALUES (?, ?, ?, ?)`,
-        [eventId, plan.type, plan.price_sats, plan.quantity]
-      );
-    }
-
-    // Insérer les partenaires
-    for (const partner of partners) {
-      await dbHelper.run(
-        `INSERT INTO partners (event_id, name, logo, description)
-         VALUES (?, ?, ?, ?)`,
-        [eventId, partner.name, partner.logo, partner.description]
-      );
-    }
-
-    await dbHelper.commit();
-
-    res.status(201).json({
-      success: true,
-      event_id: eventId,
-      message: "Événement créé avec succès !"
-    });
-
-  } catch (error) {
-    await dbHelper.rollback();
-    res.status(500).json({
+    console.error('Authentication Error:', error);
+    res.status(500).json({ 
       success: false,
-      error: error.message
+      error: 'Erreur d\'authentification',
+      code: 'AUTH_ERROR'
     });
   }
-});
+};
 
-// Réserver un billet
+// Création / réservation d'un ticket
 router.post('/tickets', authenticate, async (req, res) => {
+  let transaction;
   try {
-    const { event_id, ticket_type = 'standard' } = req.body;
+    const { event_id, plan_id, payment_method = 'full' } = req.body;
 
-    // Vérifier l'événement
-    const event = await dbHelper.get(
-      `SELECT id, price_sats FROM events 
-       WHERE id = ? AND date > datetime('now')`,
-      [event_id]
+    if (!event_id || !plan_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Les champs event_id et plan_id sont obligatoires',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    const [event, plan] = await Promise.all([
+      dbHelper.get('SELECT * FROM events WHERE id = ? AND date > datetime("now")', [event_id]),
+      dbHelper.get('SELECT * FROM ticket_plans WHERE id = ? AND event_id = ?', [plan_id, event_id])
+    ]);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Événement non trouvé ou terminé',
+        code: 'EVENT_NOT_FOUND'
+      });
+    }
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Plan de ticket non valide',
+        code: 'INVALID_PLAN'
+      });
+    }
+
+    const ticketsSold = await dbHelper.get(
+      'SELECT COUNT(*) as count FROM tickets WHERE plan_id = ?',
+      [plan_id]
     );
-    if (!event) throw new Error('Événement non trouvé ou terminé');
 
-    // Créer la référence unique
+    if (ticketsSold.count >= plan.quantity) {
+      return res.status(400).json({
+        success: false,
+        error: 'Plus de billets disponibles pour ce plan',
+        code: 'SOLD_OUT'
+      });
+    }
+
+    let installment_plan = null;
+    if (payment_method === 'installment') {
+      if (!plan.installment_allowed) {
+        return res.status(400).json({
+          success: false,
+          error: 'Paiement échelonné non autorisé pour ce billet',
+          code: 'INSTALLMENT_NOT_ALLOWED'
+        });
+      }
+
+      const installments = Math.min(3, plan.max_installments || 3);
+      const installment_amount = Math.ceil(plan.price_sats / installments);
+      
+      installment_plan = JSON.stringify({
+        total_installments: installments,
+        installment_amount,
+        payments_made: 0,
+        next_payment_due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      });
+    }
+
     const reference = `TKT-${uuidv4().substr(0, 8).toUpperCase()}`;
-    const qr_code_url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(reference)}`;
+    const qr_code_url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(reference)}`;
 
     await dbHelper.beginTransaction();
 
-    // Créer le ticket
     const result = await dbHelper.run(
-      `INSERT INTO tickets 
-       (user_id, event_id, ticket_type, status, reference, total_amount_sats, qr_code)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?)`,
-      [req.user.id, event_id, ticket_type, reference, event.price_sats, qr_code_url]
+      `INSERT INTO tickets (
+        user_id, event_id, plan_id, reference, 
+        total_amount_sats, status, qr_code_url, installment_plan
+      ) VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?)`,
+      [
+        req.user.id, 
+        event_id, 
+        plan_id, 
+        reference, 
+        plan.price_sats,
+        qr_code_url,
+        installment_plan
+      ]
     );
 
     await dbHelper.commit();
@@ -155,151 +195,179 @@ router.post('/tickets', authenticate, async (req, res) => {
       success: true,
       ticket: {
         id: result.lastID,
-        event_id,
         reference,
         qr_code: qr_code_url,
-        amount_due: event.price_sats,
-        payment_options: {
-          full: event.price_sats,
-          installment: Math.ceil(event.price_sats / 3) // Paiement en 3 fois
-        }
+        total_amount: plan.price_sats,
+        payment_method,
+        ...(installment_plan && { installment_plan: JSON.parse(installment_plan) })
       }
     });
 
   } catch (error) {
-    await dbHelper.rollback();
-    res.status(400).json({
+    if (transaction) await dbHelper.rollback();
+    console.error('Ticket Creation Error:', error);
+    
+    const status = error.code === 'SQLITE_CONSTRAINT' ? 409 : 500;
+    res.status(status).json({ 
       success: false,
-      error: error.message
+      error: error.message,
+      code: 'TICKET_CREATION_FAILED'
     });
   }
 });
 
-// Paiement d'un ticket
-router.post('/tickets/:id/payments', authenticate, async (req, res) => {
+// Liste des tickets d'un utilisateur
+router.get('/my', authenticate, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { amount_sats, payment_hash } = req.body;
+    const tickets = await dbHelper.all(`
+      SELECT 
+        t.id, t.reference, t.status,
+        t.amount_paid_sats, t.total_amount_sats,
+        e.name as title, e.location, e.date, e.image_url as image,
+        p.type as category
+      FROM tickets t
+      JOIN events e ON t.event_id = e.id
+      JOIN ticket_plans p ON t.plan_id = p.id
+      WHERE t.user_id = ? AND t.status != 'used'
+      ORDER BY t.created_at DESC
+    `, [req.user.id]);
+    
+    res.json(tickets.map(ticket => ({
+      ...ticket,
+      date: new Date(ticket.date).toLocaleDateString('fr-FR'),
+      price: ticket.total_amount_sats,
+      progress: ticket.amount_paid_sats
+    })));
+    
+  } catch (error) {
+    console.error('Error fetching user tickets:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-    // Vérifier le ticket
-    const ticket = await dbHelper.get(
-      `SELECT t.*, e.price_sats as total_price
-       FROM tickets t
-       JOIN events e ON t.event_id = e.id
-       WHERE t.id = ? AND t.user_id = ?`,
-      [id, req.user.id]
-    );
-    if (!ticket) throw new Error('Ticket non trouvé');
-
-    if (ticket.status === 'paid') {
-      throw new Error('Ce ticket est déjà payé');
-    }
-
-    await dbHelper.beginTransaction();
-
-    // Enregistrer le paiement
-    await dbHelper.run(
-      `INSERT INTO payments 
-       (ticket_id, amount_sats, payment_hash, status)
-       VALUES (?, ?, ?, 'paid')`,
-      [id, amount_sats, payment_hash]
-    );
-
-    // Calculer le nouveau statut
-    const paymentSummary = await dbHelper.get(
-      `SELECT 
-       SUM(amount_sats) as total_paid,
-       COUNT(*) as payment_count
-       FROM payments
-       WHERE ticket_id = ? AND status = 'paid'`,
-      [id]
-    );
-
-    const total_paid = paymentSummary.total_paid || 0;
-    let new_status = 'pending';
-    if (total_paid >= ticket.total_price) {
-      new_status = 'paid';
-    } else if (total_paid > 0) {
-      new_status = 'partial';
-    }
-
-    // Mettre à jour le ticket
-    await dbHelper.run(
-      `UPDATE tickets
-       SET amount_paid_sats = ?,
-           status = ?,
-           updated_at = datetime('now')
-       WHERE id = ?`,
-      [total_paid, new_status, id]
-    );
-
-    await dbHelper.commit();
+// Plans disponibles pour un événement
+router.get('/events/:id/plans', async (req, res) => {
+  try {
+    const plans = await dbHelper.all(`
+      SELECT 
+        id, type as name, price_sats, 
+        installment_allowed, min_installment_amount,
+        max_installments, quantity,
+        (quantity - (SELECT COUNT(*) FROM tickets WHERE plan_id = ticket_plans.id)) as remaining
+      FROM ticket_plans 
+      WHERE event_id = ? AND quantity > (SELECT COUNT(*) FROM tickets WHERE plan_id = ticket_plans.id)
+    `, [req.params.id]);
 
     res.json({
       success: true,
-      payment: {
-        ticket_id: id,
-        amount: amount_sats,
-        total_paid,
-        status: new_status,
-        remaining: ticket.total_price - total_paid
-      }
+      plans: plans.map(plan => ({
+        ...plan,
+        features: getPlanFeatures(plan.name)
+      }))
     });
-
   } catch (error) {
-    await dbHelper.rollback();
-    res.status(400).json({
+    console.error('Error fetching plans:', error);
+    res.status(500).json({ 
       success: false,
-      error: error.message
+      error: 'Failed to fetch plans'
     });
   }
 });
 
-// Générer une facture Lightning
-router.post('/invoices', authenticate, async (req, res) => {
+// Fonction helper pour les caractéristiques des plans
+function getPlanFeatures(planType) {
+  const featuresMap = {
+    'standard': ['Accès à l\'événement', 'Place standard', 'Goodies de base'],
+    'vip': ['Accès VIP', 'Place privilégiée', 'Rencontre artistes', 'Goodies premium'],
+    'premium': ['Accès backstage', 'Photo avec artistes', 'Cadeau exclusif']
+  };
+  return featuresMap[planType] || ['Accès à l\'événement'];
+}
+
+// Génération de facture (invoice) Lightning
+router.post('/tickets/:id/invoices', authenticate, async (req, res) => {
   try {
-    const { ticket_id, amount_sats, memo } = req.body;
+    const { id } = req.params;
+    const { amount, memo } = req.body;
 
-    // Vérifier le ticket
-    const ticket = await dbHelper.get(
-      `SELECT id, total_amount_sats, amount_paid_sats 
-       FROM tickets 
-       WHERE id = ? AND user_id = ?`,
-      [ticket_id, req.user.id]
-    );
-    if (!ticket) throw new Error('Ticket non trouvé');
-
-    const remaining = ticket.total_amount_sats - (ticket.amount_paid_sats || 0);
-    if (amount_sats > remaining) {
-      throw new Error(`Le montant demandé dépasse le dû restant (${remaining} SATS)`);
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Montant invalide',
+        code: 'INVALID_AMOUNT'
+      });
     }
 
-    // Générer la facture via LNbits
+    const ticket = await dbHelper.get(
+      `SELECT t.*, p.installment_allowed, p.min_installment_amount
+       FROM tickets t
+       JOIN ticket_plans p ON t.plan_id = p.id
+       WHERE t.id = ? AND t.user_id = ?`,
+      [id, req.user.id]
+    );
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ticket non trouvé',
+        code: 'TICKET_NOT_FOUND'
+      });
+    }
+
+    const remaining = ticket.total_amount_sats - (ticket.amount_paid_sats || 0);
+    if (remaining <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ce ticket est déjà entièrement payé',
+        code: 'ALREADY_PAID'
+      });
+    }
+
+    let payment_amount = parseInt(amount);
+    if (ticket.installment_plan) {
+      const plan = JSON.parse(ticket.installment_plan);
+      payment_amount = Math.min(
+        payment_amount,
+        plan.installment_amount,
+        remaining
+      );
+      
+      if (payment_amount < (ticket.min_installment_amount || 1000)) {
+        return res.status(400).json({
+          success: false,
+          error: `Le montant minimum par échéance est ${ticket.min_installment_amount} SATS`,
+          code: 'MIN_INSTALLMENT'
+        });
+      }
+    }
+
     const invoiceResponse = await axios.post(
       `${process.env.LNBITS_URL}/api/v1/payments`,
       {
         out: false,
-        amount: amount_sats,
-        memo: memo || `Paiement pour ticket ${ticket_id}`
+        amount: payment_amount,
+        memo: memo || `Paiement pour ticket ${ticket.reference}`,
+        expiry: 3600 // 1 heure
       },
       {
         headers: {
           'X-Api-Key': process.env.LNBITS_API_KEY,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 5000
       }
     );
 
-    // Enregistrer la facture
     await dbHelper.run(
-      `INSERT INTO invoices
-       (ticket_id, payment_request, payment_hash, amount_sats, status)
-       VALUES (?, ?, ?, ?, 'pending')`,
+      `INSERT INTO payments (
+        ticket_id, payment_request, payment_hash, 
+        amount_sats, status, expires_at
+      ) VALUES (?, ?, ?, ?, 'pending', datetime('now', '+1 hour'))`,
       [
-        ticket_id,
+        id,
         invoiceResponse.data.payment_request,
         invoiceResponse.data.payment_hash,
-        amount_sats
+        payment_amount
       ]
     );
 
@@ -308,114 +376,141 @@ router.post('/invoices', authenticate, async (req, res) => {
       invoice: {
         payment_request: invoiceResponse.data.payment_request,
         payment_hash: invoiceResponse.data.payment_hash,
-        amount: amount_sats,
-        expires_at: new Date(Date.now() + 3600 * 1000).toISOString() // 1 heure
+        amount: payment_amount,
+        expires_in: 3600,
+        memo: memo || `Paiement pour ticket ${ticket.reference}`
       }
     });
 
   } catch (error) {
-    res.status(400).json({
+    console.error('Invoice Generation Error:', error);
+    
+    const status = error.response?.status || 500;
+    res.status(status).json({
       success: false,
       error: error.message,
+      code: 'INVOICE_GENERATION_FAILED',
       details: error.response?.data || undefined
     });
   }
 });
 
-// Route événements featured
-router.get('/events', async (req, res) => {
+// Webhook de paiement (appelé par LNBITS)
+router.post('/webhook', express.json(), async (req, res) => {
+  let transaction;
   try {
-    const { featured, limit, category } = req.query;
-    let query = `
-      SELECT e.*, 
-      GROUP_CONCAT(c.name) as categories
-      FROM events e
-      LEFT JOIN event_categories ec ON e.id = ec.event_id
-      LEFT JOIN categories c ON ec.category_id = c.id
-      WHERE e.date > datetime('now')
-    `;
-
-    const params = [];
-    if (featured === 'true') {
-      query += ' AND e.featured = 1';
-    }
-    if (category) {
-      query += ' AND c.name = ?';
-      params.push(category);
+    const { payment_hash } = req.body;
+    if (!payment_hash) {
+      return res.status(400).json({
+        success: false,
+        error: 'payment_hash manquant',
+        code: 'MISSING_HASH'
+      });
     }
 
-    query += ' GROUP BY e.id ORDER BY e.date ASC';
-    if (limit) query += ` LIMIT ${parseInt(limit)}`;
+    await dbHelper.beginTransaction();
 
-    const events = await db.all(query, params);
-    res.json(events.map(e => ({
-      ...e,
-      categories: e.categories ? e.categories.split(',') : []
-    })));
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    const payment = await dbHelper.get(
+      `SELECT * FROM payments WHERE payment_hash = ? FOR UPDATE`,
+      [payment_hash]
+    );
 
-// Obtenir les tickets d'un utilisateur
-router.get('/users/tickets', authenticate, async (req, res) => {
-  try {
-    const { status } = req.query;
-    let query = `
-      SELECT t.*,
-      e.name as event_name,
-      e.date as event_date,
-      e.location as event_location,
-      e.image_url as event_image,
-      u.name as organizer_name
-      FROM tickets t
-      JOIN events e ON t.event_id = e.id
-      JOIN users u ON e.user_id = u.id
-      WHERE t.user_id = ?
-    `;
-    const params = [req.user.id];
-
-    if (status) {
-      query += ' AND t.status = ?';
-      params.push(status);
+    if (!payment) {
+      await dbHelper.rollback();
+      return res.status(404).json({
+        success: false,
+        error: 'Paiement non trouvé',
+        code: 'PAYMENT_NOT_FOUND'
+      });
     }
 
-    query += ' ORDER BY e.date DESC';
+    if (payment.status === 'paid') {
+      await dbHelper.rollback();
+      return res.json({ 
+        success: true, 
+        status: 'already_processed',
+        payment_id: payment.id
+      });
+    }
 
-    const tickets = await dbHelper.all(query, params);
+    await dbHelper.run(
+      `UPDATE payments SET status = 'paid', paid_at = datetime('now') 
+       WHERE id = ?`,
+      [payment.id]
+    );
 
-    res.json({
+    const ticket = await dbHelper.get(
+      `SELECT * FROM tickets WHERE id = ? FOR UPDATE`,
+      [payment.ticket_id]
+    );
+
+    const new_amount_paid = (ticket.amount_paid_sats || 0) + payment.amount_sats;
+    let new_status = ticket.status;
+
+    if (new_amount_paid >= ticket.total_amount_sats) {
+      new_status = 'paid';
+    } else if (new_amount_paid > 0) {
+      new_status = 'partial';
+      if (ticket.installment_plan) {
+        const plan = JSON.parse(ticket.installment_plan);
+        plan.payments_made += 1;
+
+        if (plan.payments_made < plan.total_installments) {
+          plan.next_payment_due = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          await dbHelper.run(
+            `UPDATE tickets SET installment_plan = ? WHERE id = ?`,
+            [JSON.stringify(plan), ticket.id]
+          );
+        }
+      }
+    }
+
+    await dbHelper.run(
+      `UPDATE tickets 
+       SET amount_paid_sats = ?, status = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [new_amount_paid, new_status, ticket.id]
+    );
+
+    await dbHelper.commit();
+
+    // Ici tu peux déclencher notification (email, webhook, etc.)
+
+    res.json({ 
       success: true,
-      count: tickets.length,
-      tickets: tickets.map(t => ({
-        ...t,
-        payment_progress: Math.round((t.amount_paid_sats / t.total_amount_sats) * 100)
-      }))
+      ticket_id: ticket.id,
+      new_status,
+      amount_paid: new_amount_paid,
+      remaining: ticket.total_amount_sats - new_amount_paid
     });
 
   } catch (error) {
-    res.status(500).json({
+    if (transaction) await dbHelper.rollback();
+    console.error('Webhook Error:', error);
+    res.status(500).json({ 
       success: false,
-      error: error.message
+      error: error.message,
+      code: 'WEBHOOK_PROCESSING_ERROR'
     });
   }
 });
 
-// Valider un ticket (pour organisateurs)
+// Validation d'un ticket par référence (organisateur uniquement)
 router.get('/tickets/validate/:reference', authenticate, async (req, res) => {
   try {
     const { reference } = req.params;
 
-    // Vérifier que l'utilisateur est organisateur
     if (req.user.role !== 'organizer') {
-      throw new Error('Seuls les organisateurs peuvent valider des tickets');
+      return res.status(403).json({
+        success: false,
+        error: 'Accès refusé',
+        code: 'ACCESS_DENIED'
+      });
     }
 
     const ticket = await dbHelper.get(
-      `SELECT t.*,
-       e.name as event_name,
-       e.user_id as organizer_id,
-       u.name as attendee_name
+      `SELECT t.*, e.name as event_name, e.user_id as organizer_id,
+              u.name as attendee_name, u.email as attendee_email
        FROM tickets t
        JOIN events e ON t.event_id = e.id
        JOIN users u ON t.user_id = u.id
@@ -424,61 +519,56 @@ router.get('/tickets/validate/:reference', authenticate, async (req, res) => {
     );
 
     if (!ticket) {
-      throw new Error('Ticket non trouvé');
+      return res.status(404).json({
+        success: false,
+        error: 'Ticket non trouvé',
+        code: 'TICKET_NOT_FOUND'
+      });
     }
 
-    // Vérifier que l'organisateur est bien le propriétaire de l'événement
     if (ticket.organizer_id !== req.user.id) {
-      throw new Error('Vous ne pouvez pas valider les tickets de cet événement');
+      return res.status(403).json({
+        success: false,
+        error: 'Vous ne pouvez pas valider ce ticket',
+        code: 'NOT_AUTHORIZED'
+      });
     }
 
     if (ticket.status !== 'paid') {
       return res.json({
+        success: false,
         valid: false,
-        reason: ticket.status === 'pending' ? 
-               'Paiement incomplet' : 'Ticket annulé',
-        ticket: {
-          id: ticket.id,
-          reference: ticket.reference,
-          event_name: ticket.event_name,
-          attendee_name: ticket.attendee_name,
-          status: ticket.status
-        }
+        reason: ticket.status === 'pending' ? 'Paiement incomplet' : 'Ticket annulé',
+        code: 'INVALID_TICKET_STATUS'
       });
     }
 
-    // Marquer le ticket comme utilisé (optionnel)
     await dbHelper.run(
-      `UPDATE tickets SET status = 'used' WHERE id = ?`,
+      `UPDATE tickets SET status = 'used', used_at = datetime('now') 
+       WHERE id = ?`,
       [ticket.id]
     );
 
     res.json({
+      success: true,
       valid: true,
       ticket: {
         id: ticket.id,
         reference: ticket.reference,
         event_name: ticket.event_name,
         attendee_name: ticket.attendee_name,
+        attendee_email: ticket.attendee_email,
         validated_at: new Date().toISOString()
       }
     });
 
   } catch (error) {
-    res.status(400).json({
+    console.error('Ticket Validation Error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      code: 'VALIDATION_ERROR'
     });
-  }
-});
-
-// Nouvelle route pour les catégories
-router.get('/categories', async (req, res) => {
-  try {
-    const categories = await db.all('SELECT * FROM categories ORDER BY name');
-    res.json(categories);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 

@@ -17,6 +17,7 @@
     "express-rate-limit": "^6.11.2",
     "helmet": "^7.2.0",
     "lnbits": "^1.1.0",
+    "multer": "^2.0.1",
     "qrcode": "^1.5.4",
     "sqlite3": "^5.1.7",
     "uuid": "^9.0.1",
