@@ -8,9 +8,10 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const dotenv = require('dotenv');
 
-
+const fs = require('fs'); // Ajoutez cette ligne au début du fichier
 // Charge .env à la racine de /backend
 dotenv.config();
+
 
 // Initialisation Express
 const app = express();
@@ -61,9 +62,15 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+const uploadsDir = path.join(__dirname, '..', 'uploads'); // Modifiez cette ligne
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => {
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
   }
 }));
 

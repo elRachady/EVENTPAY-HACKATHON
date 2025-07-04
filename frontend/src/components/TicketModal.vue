@@ -438,7 +438,7 @@ function handlePayment(action: string) {
 
 .progress-fill {
   height: 8px;
-  background-color: #2563eb;
+  background-color:   #2563eb;
   transition: width 0.5s ease;
 }
 
