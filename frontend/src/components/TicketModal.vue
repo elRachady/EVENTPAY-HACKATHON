@@ -137,7 +137,12 @@ watch(() => props.isOpen, (isOpen) => {
         </div>
         <div class="p-4">
           <div class="rounded-xl overflow-hidden mb-4">
-            <img :src="event?.id && event.id.startsWith('5-') ? '/src/assets/bitcoinmastermind.jpg' : event?.image" :alt="event?.title" class="w-full h-48 object-cover">
+            <img
+              :src="event?.id && event.id.startsWith('5-') ? '/src/assets/bitcoinmastermind.jpg' : (event?.image || '/placeholder-event.jpg')"
+              :alt="event?.title"
+              class="w-full h-48 object-cover"
+              @error="(e) => { e.target.src = '/placeholder-event.jpg' }"
+            >
           </div>
           
           <div class="mb-6">
